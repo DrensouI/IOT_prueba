@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "677746057506",
+    "project_id": "iotaprueba-3dea9",
+    "storage_bucket": "iotaprueba-3dea9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:677746057506:android:407764de82c48546ec057b",
+        "android_client_info": {
+          "package_name": "com.example.arduino"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQIpUPG-U-Z57t_ezvH-FItXbNwyJEbbo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
