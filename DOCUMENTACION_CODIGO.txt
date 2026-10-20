@@ -250,7 +250,7 @@ arduino_test
 4. ISO/IEC 27001 - Control A.14: Seguridad en el Desarrollo y Mantenimiento de Sistemas
    - Principio de Mínimo Privilegio (Android): En `AndroidManifest.xml` y `BluetoothScreen.kt`, los permisos de escaneo Bluetooth en Android 12+ se configuran con `android:usesPermissionFlags="neverForLocation"`, asegurando que la app no recopile datos de ubicación física innecesarios del usuario.
 sd
-
+prueba de guardado
 [B] LINEAMIENTOS DE SEGURIDAD OT (TECNOLOGÍA DE OPERACIÓN / IOT INDUSTRIAL):
 
 1. Trazabilidad y No Repudio (Audit Logging)
