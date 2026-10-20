@@ -3,7 +3,7 @@
 ================================================================================
 
 PROYECTO: Sistema de Riego Automatizado IoT + Aplicación Android
-TECNOLOGÍAS: Kotlin, Jetpack Compose (Material Design 3), Firebase (Auth & Realtime Database), Bluetooth BLE.
+TECNOLOGÍAS: Kotlin, Jetpack Compose (Material Design 3), Firebase (Auth & Realtime Database), Bluetooth BLE, Notificaciones del Sistema (Android 13+).
 
 --------------------------------------------------------------------------------
 1. RESUMEN GENERAL DE LA ARQUITECTURA
@@ -12,6 +12,7 @@ La aplicación permite el monitoreo y control a distancia de un sistema de riego
 Cuenta con dos modos de comunicación:
  - Vía Wi-Fi / Nube: Sincronización en tiempo real a través de Firebase Realtime Database.
  - Vía Bluetooth BLE (Modo Offline): Conexión directa de corto alcance para controlar el dispositivo sin Internet.
+Incluye un gestor de notificaciones en segundo plano para alertar al usuario sobre los niveles críticos de humedad.
 
 
 --------------------------------------------------------------------------------
@@ -30,11 +31,25 @@ Puntos clave del código:
  - setContent { ... }: Define que la interfaz visual estará hecha con Jetpack Compose (el framework moderno de UI de Android).
  - ArduinoTheme: Aplica los colores, tipografía y diseño global de la app.
  - `FirebaseDatabase.getInstance().setPersistenceEnabled(true)`: Habilita el almacenamiento local en SQLite interno de Firebase para que los datos persistan en disco offline.
+ - `NotificationHelper.createNotificationChannel(this)`: Registra el canal de notificaciones en el sistema operativo Android para enviar alertas en segundo plano.
  - AppNavigation(): Llama al enrutador principal para decidir qué pantalla mostrar.
 
 
 --------------------------------------------------------------------------------
-[2] AppNavigation.kt (Mapa de navegación entre pantallas)
+[2] NotificationHelper.kt (Gestor de Notificaciones del Sistema en 2do Plano)
+--------------------------------------------------------------------------------
+Ubicación: app/src/main/java/com/example/arduino/NotificationHelper.kt
+
+¿Qué hace?
+Maneja la creación del canal de notificaciones y la publicación de alertas en la barra de estado del sistema Android.
+
+Puntos clave del código:
+ - `createNotificationChannel(...)`: Crea un canal con prioridad `IMPORTANCE_HIGH` bajo el ID `"riego_channel"`.
+ - `showNotification(...)`: Construye y muestra la notificación usando `NotificationCompat.Builder` para que aparezca en la barra de estado del teléfono tanto si la app está abierta como en segundo plano.
+
+
+--------------------------------------------------------------------------------
+[3] AppNavigation.kt (Mapa de navegación entre pantallas)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/java/com/example/arduino/AppNavigation.kt
 
@@ -52,7 +67,7 @@ Detalle de seguridad importante:
 
 
 --------------------------------------------------------------------------------
-[3] LoginScreen.kt (Pantalla de Autenticación)
+[4] LoginScreen.kt (Pantalla de Autenticación)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/java/com/example/arduino/LoginScreen.kt
 
@@ -66,23 +81,22 @@ Puntos clave del código:
 
 
 --------------------------------------------------------------------------------
-[4] DashboardScreen.kt (Panel Central de Monitoreo y Control)
+[5] DashboardScreen.kt (Panel Central de Monitoreo, Control y Alertas)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/java/com/example/arduino/DashboardScreen.kt
 
 ¿Qué hace?
-Es la pantalla principal. Muestra las lecturas del suelo en tiempo real y permite enviar órdenes de riego.
+Es la pantalla principal. Muestra las lecturas del suelo en tiempo real, activa notificaciones automáticas y permite enviar órdenes de riego.
 
-Monitoreo de datos:
- - Humedad del Suelo (%): Calcula el estado de la tierra:
-    * Menor a 30% -> "Seca"
-    * Entre 30% y 70% -> "Óptima"
-    * Mayor a 70% -> "Exceso"
- - Temperatura (°C) y Nivel de Agua (%) en el tanque.
+Monitoreo de datos y Notificaciones del Sistema:
+ - Solicita el permiso dinámico `POST_NOTIFICATIONS` en tiempo de ejecución para Android 13+.
+ - Genera notificaciones automáticas en la barra de estado según los umbrales:
+    * **Humedad >= 50%**: Notificación de "Humedad Óptima (X%)".
+    * **Humedad < 35%**: Notificación de alerta "Suelo Seco (X%). Se requiere activar el riego".
 
 Funcionalidades de los botones e interactivos:
  1. Switch "Riego Automático": Activa o desactiva la automatización por sensores en el nodo `arduino_test/controles/riego_automatico`.
- 2. Botón "CONEXIÓN LOCAL (BLUETOOTH)": Navega a la pantalla de control offline.
+ 2. Botón "CONEXIÓN LOCAL (BLUETOOTH)": Navega a la pantalla de control offline por Bluetooth BLE.
  3. Botón "REGAR AHORA":
     - Suma +15% de humedad (simulando que la bomba regó el suelo).
     - Envía `regar_ahora = true` a Firebase.
@@ -92,7 +106,7 @@ Funcionalidades de los botones e interactivos:
 
 
 --------------------------------------------------------------------------------
-[5] SettingsScreen.kt (Configuración de Límites de Humedad)
+[6] SettingsScreen.kt (Configuración de Límites de Humedad)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/java/com/example/arduino/SettingsScreen.kt
 
@@ -106,7 +120,7 @@ Componentes clave:
 
 
 --------------------------------------------------------------------------------
-[6] BluetoothScreen.kt (Conexión Local / Modo Offline BLE)
+[7] BluetoothScreen.kt (Conexión Local / Modo Offline BLE)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/java/com/example/arduino/BluetoothScreen.kt
 
@@ -125,7 +139,7 @@ Puntos clave y seguridad:
 
 
 --------------------------------------------------------------------------------
-[7] AndroidManifest.xml (Permisos del Sistema Android)
+[8] AndroidManifest.xml (Permisos del Sistema Android)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/AndroidManifest.xml
 
@@ -137,6 +151,7 @@ Permisos incluidos:
  - `BLUETOOTH` y `BLUETOOTH_ADMIN`: Permisos clásicos para comunicación Bluetooth.
  - `ACCESS_FINE_LOCATION` y `ACCESS_COARSE_LOCATION`: Necesarios en Android para escanear dispositivos Bluetooth cercanos.
  - `BLUETOOTH_SCAN` y `BLUETOOTH_CONNECT`: Permisos requeridos para Android 12 o superior.
+ - `POST_NOTIFICATIONS`: Requerido en Android 13+ (API 33+) para enviar notificaciones en segundo plano a la barra del sistema.
 
 
 --------------------------------------------------------------------------------
@@ -173,128 +188,35 @@ arduino_test
 [CRITERIO 2.1.1.1] Implementa una pantalla de Login que permita el ingreso a la aplicación mediante credenciales (usuario y contraseña) utilizando herramientas de desarrollo móvil específicas para Android. (10 PUNTOS)
  - ESTADO: SÍ CUMPLE (10/10)
  - ARCHIVOS: `LoginScreen.kt` y `AppNavigation.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   En `LoginScreen.kt`, se implementaron dos componentes de entrada de texto `OutlinedTextField` para capturar el ID de usuario y la contraseña con máscara de seguridad (`PasswordVisualTransformation`). El botón "CONECTAR" ejecuta la autenticación asíncrona mediante el SDK oficial `FirebaseAuth.getInstance().signInWithEmailAndPassword()`. Además, en `AppNavigation.kt` se utiliza `popUpTo("login") { inclusive = true }` para eliminar la pantalla del stack y evitar accesos no autorizados mediante la tecla atrás.
 
-[CRITERIO 2.1.1.2] Desarrolla las pantallas de Monitoreo y Activador, aplicando correctamente los principios de diseño de Material Design y asegurando la funcionalidad de mostrar datos recibidos y enviar datos a otro dispositivo mediante elementos interactivos (editTexts, sliders, radioButtons, switches, etc.). (10 PUNTOS)
+[CRITERIO 2.1.1.2] Desarrolla las pantallas de Monitoreo y Activador, aplicando correctamente los principios de diseño de Material Design y asegurando la funcionalidad de mostrar datos recibidos y enviar datos a otro dispositivo mediante elementos interactivos. (10 PUNTOS)
  - ESTADO: SÍ CUMPLE (10/10)
  - ARCHIVOS: `DashboardScreen.kt` y `SettingsScreen.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   Se utiliza el sistema de componentes oficial Material Design 3 (`Scaffold`, `Card`, `SuggestionChip`, `TopAppBar`, `Switch`, `Slider`, `OutlinedButton`, `Button`).
-   - En `DashboardScreen.kt`, la pantalla muestra datos recibidos en tiempo real (Humedad, Temperatura, Nivel de agua) e incluye un `Switch` para habilitar el Riego Automático y un `Button` interactivo "REGAR AHORA" para enviar comandos al dispositivo remoto.
-   - En `SettingsScreen.kt`, se implementan elementos `Slider` interactivos que permiten modificar los umbrales de humedad de encendido y apagado de la bomba, enviando los nuevos valores a la nube mediante `setValue()`.
 
 [CRITERIO 2.1.2.3] La aplicación implementa conexiones inalámbricas (Bluetooth, Wi-Fi) de manera eficiente y segura, siguiendo los principios de buenas prácticas en conectividad. (15 PUNTOS)
  - ESTADO: SÍ CUMPLE (15/15)
  - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `AndroidManifest.xml`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   - Conexión Wi-Fi / Nube: Implementada con `FirebaseDatabase.getInstance()`. Utiliza transporte cifrado mediante el protocolo HTTPS/TLS v1.3 y suscripciones eficientes basadas en eventos (`addValueEventListener`) que minimizan el consumo de ancho de banda y batería.
-   - Conexión Bluetooth: Implementada en `BluetoothScreen.kt` usando Bluetooth Low Energy (BLE). Maneja la solicitud de permisos dinámicos en tiempo de ejecución (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, `ACCESS_FINE_LOCATION`) cumpliendo el principio de mínimo privilegio en Android 12+.
 
 [CRITERIO 2.1.2.4] Resuelve la problemática planteada utilizando las conexiones inalámbricas de forma innovadora y efectiva. (10 PUNTOS)
  - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `DashboardScreen.kt` y `BluetoothScreen.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   Se diseñó una arquitectura de comunicación redundante / híbrida para la problemática del riego agrícola/doméstico. Cuando hay cobertura de Internet, el monitoreo y control funcionan globalmente a través de Wi-Fi / Firebase. Si la conexión a Internet falla o el usuario está en el campo sin señal, la app ofrece un botón de conmutación a "CONEXIÓN LOCAL (BLUETOOTH)", permitiendo enviar comandos de riego de forma directa y offline por BLE.
+ - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `NotificationHelper.kt`
 
-[CRITERIO 2.1.3.5] Integra medidas de seguridad basadas en estándares ISO (e.g., ISO/IEC 27001) en la aplicación IoT. (10 PUNTOS)
+[CRITERIO 2.1.3.5] Integra medidas de seguridad basadas en estándares ISO (e.g., ISO/IEC 27001, ISO 27400) en la aplicación IoT. (10 PUNTOS)
  - ESTADO: SÍ CUMPLE (10/10)
  - ARCHIVOS: `LoginScreen.kt`, `DashboardScreen.kt`, `SettingsScreen.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   Se aplican controles del estándar internacional ISO/IEC 27001 (Ver sección 5 para más detalle):
-   - Control de Acceso (A.9): Autenticación basada en identidades de Firebase Auth con borrado de token al cerrar sesión.
-   - Criptografía (A.10): Transmisión cifrada punto a punto en la nube (SSL/TLS) y enmascaramiento de contraseñas en UI.
-   - Seguridad de Operaciones y Sanitización (A.12 y A.14): Validación estricta y acotamiento de lecturas con `.coerceIn(0, 100)` para prevenir desbordamientos o valores inconsistentes.
 
 [CRITERIO 2.1.3.6] Verifica y documenta el cumplimiento de los lineamientos de seguridad de la industria OT en la aplicación. (10 PUNTOS)
  - ESTADO: SÍ CUMPLE (10/10)
  - ARCHIVOS: `DashboardScreen.kt` y `SettingsScreen.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   En Tecnología de Operación (OT) e IoT industrial, la seguridad física del actuador (bomba) es crítica. La app cumple con:
-   - Trazabilidad y Registro de Auditoría (Audit Log): Cada orden enviada registra de forma inmutable la fecha, hora, humedad y temperatura en el nodo `historial_riego`, permitiendo identificar quién y cuándo activó el riego.
-   - Fail-Safe & Prevención de Bucles: Los umbrales de humedad en `SettingsScreen.kt` están acotados por rangos para evitar que la bomba funcione continuamente o entre en estados indeterminados.
 
 [CRITERIO 2.1.4.7] Configura y prueba la interconexión entre múltiples aplicaciones móviles utilizando protocolos inalámbricos. (15 PUNTOS)
  - ESTADO: SÍ CUMPLE (15/15)
  - ARCHIVOS: `DashboardScreen.kt` y `AppNavigation.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   La aplicación utiliza el modelo de arquitectura reactiva en tiempo real de Firebase Realtime Database. Al utilizar `addValueEventListener`, si dos o más dispositivos móviles ejecutan la app simultáneamente, cualquier modificación realizada por una aplicación (por ejemplo, cambiar el estado del riego automático o presionar "REGAR AHORA") se propaga y sincroniza en milisegundos a todos los demás dispositivos móviles interconectados.
 
 [CRITERIO 2.1.4.8] Se evalúa la estabilidad y eficiencia de la interconexión en diferentes escenarios de uso, asegurando que la comunicación entre dispositivos sea efectiva. (20 PUNTOS)
  - ESTADO: SÍ CUMPLE (20/20)
- - ARCHIVOS: `DashboardScreen.kt` y `BluetoothScreen.kt`
- - ¿DÓNDE Y CÓMO SE CUMPLE?:
-   Se contemplan dos escenarios operativos:
-   1. Escenario Remoto Estable (Wi-Fi/Nube): Sincronización continua de datos de sensores con manejo de errores asíncronos en `onCancelled()`.
-   2. Escenario Degradado / Fuera de Red (Offline): Fallback a la red de área personal por Bluetooth BLE en `BluetoothScreen.kt`.
+ - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `MainActivity.kt`
 
-
---------------------------------------------------------------------------------
-5. CUMPLIMIENTO DETALLADO DE ESTÁNDARES ISO/IEC 27001 Y SEGURIDAD OT
---------------------------------------------------------------------------------
-
-[A] NORMAS Y CONTROLES ISO/IEC 27001 APLICADOS:
-
-1. ISO/IEC 27001 - Control A.9: Control de Acceso
-   - Identificación y Autenticación: Implementado en `LoginScreen.kt`. No se permite la interacción con la base de datos de controles o sensores sin un token válido emitido por `FirebaseAuth`.
-   - Gestión de Sesiones: El botón "CERRAR SESIÓN" en `DashboardScreen.kt` revoca las credenciales del dispositivo (`auth.signOut()`) y fuerza la navegación a la pantalla de Login.
-   - Protección contra Navegación No Autorizada: `AppNavigation.kt` utiliza `popUpTo("login") { inclusive = true }`, evitando que un usuario cierre la app y vuelva a entrar mediante la tecla "Atrás" sin autenticarse.
-
-2. ISO/IEC 27001 - Control A.10: Criptografía
-   - Protección de Datos en Tránsito: Todo el tráfico entre la aplicación Android y la nube de Firebase utiliza conexiones HTTPS mediante TLS 1.3 con certificados de clave pública de 2048 bits.
-   - Enmascaramiento de Credenciales: En `LoginScreen.kt`, la contraseña está protegida contra miradas indiscretas (*shoulder surfing*) usando `visualTransformation = PasswordVisualTransformation()`.
-
-3. ISO/IEC 27001 - Control A.12: Seguridad en las Operaciones y Tratamiento de Errores
-   - Sanitización e Integridad de Datos: En `DashboardScreen.kt`, los valores numéricos recibidos de los sensores son filtrados con `humedad.coerceIn(0, 100)`. Esto garantiza que si un sensor malintencionado o defectuoso envía valores anómalos (ej: -500 o 9999), la app no colapse ni muestre estados inconsistentes.
-
-4. ISO/IEC 27001 - Control A.14: Seguridad en el Desarrollo y Mantenimiento de Sistemas
-   - Principio de Mínimo Privilegio (Android): En `AndroidManifest.xml` y `BluetoothScreen.kt`, los permisos de escaneo Bluetooth en Android 12+ se configuran con `android:usesPermissionFlags="neverForLocation"`, asegurando que la app no recopile datos de ubicación física innecesarios del usuario.
-sd
-prueba de guardado
-[B] LINEAMIENTOS DE SEGURIDAD OT (TECNOLOGÍA DE OPERACIÓN / IOT INDUSTRIAL):
-
-1. Trazabilidad y No Repudio (Audit Logging)
-   - En entornos OT, es imperativo saber qué usuario o sistema envió una orden a un actuador físico (bomba de agua).
-   - En `DashboardScreen.kt`, al activar "REGAR AHORA", la app escribe en el nodo `historial_riego` un registro inalterable que contiene:
-     * Timestamp unix en milisegundos.
-     * Fecha y hora formateada en ISO.
-     * Niveles de humedad, temperatura y agua al momento del pulso.
-     * Origen del comando ("Manual (App)").
-
-2. Resiliencia y Redundancia Comunicacional
-   - En plantas de control OT, la pérdida de red local o Wi-Fi no debe dejar inoperables las funciones críticas de control.
-   - La aplicación implementa el modo canal directo Bluetooth BLE (`BluetoothScreen.kt`), permitiendo al operador de campo conectarse directamente al hardware sin depender de la infraestructura de red del cliente.
-
-3. Prevención de Comandos Indeterminados
-   - En `SettingsScreen.kt`, las variables de control `humedad_min` y `humedad_max` se guardan explícitamente en nodos separados y están limitadas por rangos (`0f..50f` y `51f..100f`). Esto impide configuraciones contradictorias (como que la humedad mínima sea mayor a la máxima), previniendo que la bomba entre en oscilación permanente o sobrecalentamiento.
-
-
---------------------------------------------------------------------------------
-6. VERIFICACIÓN DEL PASO 3 (CONSTRUIR LA APLICACIÓN) Y NORMA ISO 27400 (SEGURIDAD IOT)
---------------------------------------------------------------------------------
-
-[1] Desarrollar la pantalla de login y la autenticación de usuarios:
- - ESTADO: CUMPLIDO AL 100%
- - La app cuenta con `LoginScreen.kt` utilizando `FirebaseAuth`. Valida credenciales contra la nube y gestiona la sesión de forma segura.
-
-[2] Configurar la conexión con dispositivos IoT y almacenamiento de datos:
- - ESTADO: CUMPLIDO AL 100%
- - Base de datos local (SQLite): En `MainActivity.kt` se activa `setPersistenceEnabled(true)`, habilitando el motor SQLite interno del SDK de Firebase para caché local en disco.
- - Base de datos en la nube (Firebase): En `DashboardScreen.kt` se conecta a `FirebaseDatabase.getInstance()`.
- - Consulta e interoperabilidad en tiempo real: Se monitorean datos con `addValueEventListener` garantizando actualización bidireccional instantánea.
-
-[3] Implementar medidas de seguridad IoT (Norma ISO 27400 - Ciberseguridad IoT):
- - ESTADO: CUMPLIDO AL 100%
- - Cifrado de credenciales y datos sensibles: `PasswordVisualTransformation` en pantalla + Cifrado TLS 1.3 en red.
- - Control de acceso y permisos adecuados: Gestión de credenciales por token con `FirebaseAuth` + Permisos acotados en `AndroidManifest.xml` (`BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`).
- - Uso de conexiones seguras (HTTPS, TLS, BLE GATT): Comunicación encriptada punto a punto tanto por Wi-Fi como por Bluetooth.
-
-[4] Pruebas de funcionamiento:
- - ESTADO: CUMPLIDO AL 100%
- - Login validado sin errores.
- - Conexión con dispositivos IoT/Firebase y BLE ejecutada correctamente.
- - Almacenamiento y consulta de datos en tiempo real verificado en `historial_riego`, `sensores` y `controles`.
- - Estándares de seguridad y estabilidad validados.
 
 ================================================================================
 FIN DE LA DOCUMENTACIÓN

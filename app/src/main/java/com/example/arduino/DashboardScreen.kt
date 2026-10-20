@@ -1,6 +1,10 @@
 package com.example.arduino
 
+import android.Manifest
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -34,10 +38,23 @@ fun DashboardScreen(
     var nivelAgua by remember { mutableIntStateOf(80) }
     var automaticRiego by remember { mutableStateOf(false) }
 
-    // Referencia al nodo de tu Arduino en la base de datos
+    var notifiedHigh by remember { mutableStateOf(false) }
+    var notifiedLow by remember { mutableStateOf(false) }
+
     val database = remember { FirebaseDatabase.getInstance().reference.child("arduino_test") }
 
-    // Lanzamos la conexión a Firebase al abrir la pantalla
+    // Solicitar permiso de notificaciones en Android 13+ (API 33+)
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Escuchar sensores de Firebase
     LaunchedEffect(Unit) {
         database.child("sensores").addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -59,6 +76,32 @@ fun DashboardScreen(
             }
             override fun onCancelled(error: DatabaseError) {}
         })
+    }
+
+    // Generar notificaciones en 2do plano / barra de estado del sistema al cambiar la humedad
+    LaunchedEffect(humedad) {
+        if (humedad >= 50 && !notifiedHigh) {
+            NotificationHelper.showNotification(
+                context = context,
+                notificationId = 1,
+                title = "Humedad Óptima ($humedad%)",
+                message = "La humedad del suelo subió al $humedad%. El nivel de agua es adecuado."
+            )
+            notifiedHigh = true
+            notifiedLow = false
+        } else if (humedad < 35 && !notifiedLow) {
+            NotificationHelper.showNotification(
+                context = context,
+                notificationId = 2,
+                title = "Alerta: Suelo Seco ($humedad%)",
+                message = "La humedad bajó al $humedad%. Se requiere activar el riego."
+            )
+            notifiedLow = true
+            notifiedHigh = false
+        } else if (humedad in 35..49) {
+            notifiedHigh = false
+            notifiedLow = false
+        }
     }
 
     val estadoHumedad = when {
@@ -150,19 +193,15 @@ fun DashboardScreen(
                     val timestamp = System.currentTimeMillis()
                     val fechaFormateada = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
 
-                    // Incrementar el % de humedad simulada en +15% (hasta un máximo de 100%)
                     val nuevaHumedad = (humedad + 15).coerceAtMost(100)
 
-                    // 1. Actualizar el % de humedad en la base de datos en tiempo real
                     database.child("sensores").child("humedad").setValue(nuevaHumedad)
                     database.child("sensores").child("temperatura").setValue(temperatura)
                     database.child("sensores").child("nivel_agua").setValue(nivelAgua)
 
-                    // 2. Activar la orden de riego e indicar la última fecha
                     database.child("controles").child("regar_ahora").setValue(true)
                     database.child("controles").child("ultimo_riego").setValue(fechaFormateada)
 
-                    // 3. Guardar el registro en el historial de riego en Firebase
                     val nuevoRegistro = mapOf(
                         "fecha" to fechaFormateada,
                         "timestamp" to timestamp,

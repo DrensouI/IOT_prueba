@@ -21,6 +21,9 @@ class MainActivity : ComponentActivity() {
             // La persistencia ya fue habilitada
         }
 
+        // Crear canal de notificaciones en el sistema Android
+        NotificationHelper.createNotificationChannel(this)
+
         setContent {
             ArduinoTheme {
                 Surface(
