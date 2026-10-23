@@ -1,6 +1,6 @@
 package com.example.arduino
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -9,6 +9,7 @@ import com.google.firebase.auth.FirebaseAuth
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    var isBluetoothConnected by remember { mutableStateOf(false) }
 
     NavHost(navController = navController, startDestination = "login") {
         composable("login") {
@@ -29,7 +30,9 @@ fun AppNavigation() {
                     navController.navigate("login") {
                         popUpTo("dashboard") { inclusive = true }
                     }
-                }
+                },
+                isBluetoothMode = isBluetoothConnected,
+                onSwitchToWiFi = { isBluetoothConnected = false }
             )
         }
         composable("settings") {
@@ -39,7 +42,8 @@ fun AppNavigation() {
         }
         composable("bluetooth") {
             BluetoothScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onBluetoothConnected = { isBluetoothConnected = true }
             )
         }
     }

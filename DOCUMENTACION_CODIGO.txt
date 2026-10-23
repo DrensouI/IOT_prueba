@@ -12,7 +12,7 @@ La aplicación permite el monitoreo y control a distancia de un sistema de riego
 Cuenta con dos modos de comunicación:
  - Vía Wi-Fi / Nube: Sincronización en tiempo real a través de Firebase Realtime Database.
  - Vía Bluetooth BLE (Modo Offline): Conexión directa de corto alcance para controlar el dispositivo sin Internet.
-Incluye un gestor de notificaciones en segundo plano para alertar al usuario sobre los niveles críticos de humedad.
+Incluye simulación física proporcional de sensores y notificaciones automáticas en segundo plano al alcanzar umbrales clave del 25%, 50% y 100% de humedad.
 
 
 --------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ Ubicación: app/src/main/java/com/example/arduino/NotificationHelper.kt
 Maneja la creación del canal de notificaciones y la publicación de alertas en la barra de estado del sistema Android.
 
 Puntos clave del código:
- - `createNotificationChannel(...)`: Crea un canal con prioridad `IMPORTANCE_HIGH` bajo el ID `"riego_channel"`.
+ - `createNotificationChannel(...)`: Crea un canal con prioridad `IMPORTANCE_HIGH` bajo el ID `"riego_channel_v2"`.
  - `showNotification(...)`: Construye y muestra la notificación usando `NotificationCompat.Builder` para que aparezca en la barra de estado del teléfono tanto si la app está abierta como en segundo plano.
 
 
@@ -62,8 +62,8 @@ Pantallas y rutas registradas:
  3. "settings": Muestra la pantalla de configuración de humedad (`SettingsScreen`).
  4. "bluetooth": Muestra la pantalla de conexión local por Bluetooth (`BluetoothScreen`).
 
-Detalle de seguridad importante:
- - `popUpTo("login") { inclusive = true }`: Cuando el usuario inicia sesión correctamente, elimina la pantalla de login del historial de navegación. Esto impide que si el usuario presiona el botón "Atrás" de Android, vuelva a la pantalla de login por error.
+Detalle de seguridad e integración:
+ - Mantiene la variable `isBluetoothConnected` compartida para actualizar en tiempo real el tipo de conexión actual y mostrar la opción de reconexión a Wi-Fi.
 
 
 --------------------------------------------------------------------------------
@@ -86,22 +86,26 @@ Puntos clave del código:
 Ubicación: app/src/main/java/com/example/arduino/DashboardScreen.kt
 
 ¿Qué hace?
-Es la pantalla principal. Muestra las lecturas del suelo en tiempo real, activa notificaciones automáticas y permite enviar órdenes de riego.
+Es la pantalla principal. Muestra las lecturas del suelo en tiempo real, activa notificaciones automáticas al 25%, 50% y 100%, y permite enviar órdenes de riego.
 
-Monitoreo de datos y Notificaciones del Sistema:
- - Solicita el permiso dinámico `POST_NOTIFICATIONS` en tiempo de ejecución para Android 13+.
- - Genera notificaciones automáticas en la barra de estado según los umbrales:
-    * **Humedad >= 50%**: Notificación de "Humedad Óptima (X%)".
-    * **Humedad < 35%**: Notificación de alerta "Suelo Seco (X%). Se requiere activar el riego".
+Monitoreo y Dinámica de Sensores:
+ - **Humedad (%)**: Aumenta progresivamente con el riego manual.
+ - **Temperatura (°C)**: Se recalcula automáticamente de forma inversa a la humedad (`35 - humedad * 0.15`), simulando el refresco térmico de la tierra.
+ - **Nivel de Agua (%)**: Se reduce en función del agua consumida del estanque (`100 - humedad * 0.5`).
+
+Alertas del Sistema (Notificaciones al 25%, 50% y 100%):
+ - **25% de Humedad**: *"Alerta: Suelo Muy Seco (25%). Se requiere activar el riego"*.
+ - **50% de Humedad**: *"Humedad Óptima (50%). El nivel de riego es adecuado"*.
+ - **100% de Humedad**: *"Humedad Máxima - Suelo Saturado (100%). La tierra está completamente regada"*.
 
 Funcionalidades de los botones e interactivos:
- 1. Switch "Riego Automático": Activa o desactiva la automatización por sensores en el nodo `arduino_test/controles/riego_automatico`.
- 2. Botón "CONEXIÓN LOCAL (BLUETOOTH)": Navega a la pantalla de control offline por Bluetooth BLE.
+ 1. Switch "Riego Automático": Activa o desactiva la bandera en el nodo `arduino_test/controles/riego_automatico`.
+ 2. Botón dinámico "CONEXIÓN LOCAL (BLUETOOTH) / RECONECTAR A WI-FI": Conmuta entre ambos modos de conexión.
  3. Botón "REGAR AHORA":
-    - Suma +15% de humedad (simulando que la bomba regó el suelo).
-    - Envía `regar_ahora = true` a Firebase.
-    - Crea un registro inmutable con fecha, hora, humedad y temperatura en `arduino_test/historial_riego`.
- 4. Botón "RESTABLECER SENSORES": Reinicia los sensores en Firebase a los valores base (20% humedad, 24°C temp, 80% agua) y apaga la bomba.
+    - Suma +15% a la humedad.
+    - Recalcula temperatura y nivel de agua.
+    - Envía `regar_ahora = true` a Firebase y registra en `historial_riego`.
+ 4. Botón "RESTABLECER SENSORES": Reinicia los sensores en Firebase a los valores base (20% humedad, 32°C temp, 90% agua).
  5. Botón "CERRAR SESIÓN": Cierra la sesión en Firebase Auth y regresa a la pantalla de Login.
 
 
@@ -113,11 +117,6 @@ Ubicación: app/src/main/java/com/example/arduino/SettingsScreen.kt
 ¿Qué hace?
 Permite ajustar los rangos de automatización del riego mediante barras deslizables (Sliders).
 
-Componentes clave:
- - Slider 1 (Humedad Mínima 0% - 50%): Define el punto crítico en que la bomba debe encenderse automáticamente si la tierra se seca.
- - Slider 2 (Humedad Máxima 51% - 100%): Define el punto de saturación en que la bomba debe apagarse automáticamente.
- - `onValueChangeFinished`: Guarda el nuevo límite en Firebase bajo el nodo `arduino_test/configuracion` únicamente cuando el usuario suelta la barra deslizable.
-
 
 --------------------------------------------------------------------------------
 [7] BluetoothScreen.kt (Conexión Local / Modo Offline BLE)
@@ -127,38 +126,21 @@ Ubicación: app/src/main/java/com/example/arduino/BluetoothScreen.kt
 ¿Qué hace?
 Permite controlar el sistema directamente mediante Bluetooth Low Energy (BLE) en caso de que falle la red Wi-Fi.
 
-Puntos clave y seguridad:
- - `rememberLauncherForActivityResult(...)`: Solicita permisos en tiempo de ejecución al usuario según la versión de Android:
-    * Android 12+ (API 31+): Solicita `BLUETOOTH_SCAN` y `BLUETOOTH_CONNECT`.
-    * Versiones anteriores: Solicita `ACCESS_FINE_LOCATION`.
- - Simulación de conexión:
-    * "ESCANEAR DISPOSITIVOS BLE": Busca la placa.
-    * Muestra la tarjeta del dispositivo "Arduino Riego (HW-038)".
-    * "Conectar": Establece el canal de comunicación GATT.
-    * "FORZAR RIEGO (OFFLINE)": Simula el envío del comando serial '1' para activar la bomba sin Internet.
-
 
 --------------------------------------------------------------------------------
 [8] AndroidManifest.xml (Permisos del Sistema Android)
 --------------------------------------------------------------------------------
 Ubicación: app/src/main/AndroidManifest.xml
 
-¿Qué hace?
-Declara los permisos que la aplicación requiere pedirle al sistema operativo Android para funcionar.
-
 Permisos incluidos:
- - `INTERNET` y `ACCESS_NETWORK_STATE`: Necesarios para conectarse a Firebase en la nube.
- - `BLUETOOTH` y `BLUETOOTH_ADMIN`: Permisos clásicos para comunicación Bluetooth.
- - `ACCESS_FINE_LOCATION` y `ACCESS_COARSE_LOCATION`: Necesarios en Android para escanear dispositivos Bluetooth cercanos.
- - `BLUETOOTH_SCAN` y `BLUETOOTH_CONNECT`: Permisos requeridos para Android 12 o superior.
- - `POST_NOTIFICATIONS`: Requerido en Android 13+ (API 33+) para enviar notificaciones en segundo plano a la barra del sistema.
+ - `INTERNET` y `ACCESS_NETWORK_STATE`
+ - `BLUETOOTH`, `BLUETOOTH_ADMIN`, `ACCESS_FINE_LOCATION`, `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`
+ - `POST_NOTIFICATIONS` (Android 13+)
 
 
 --------------------------------------------------------------------------------
 3. ESTRUCTURA DE DATOS EN FIREBASE REALTIME DATABASE
 --------------------------------------------------------------------------------
-Los datos se organizan en árbol bajo la ruta principal "arduino_test":
-
 arduino_test
 ├── configuracion
 │   ├── humedad_max: 70
@@ -179,44 +161,6 @@ arduino_test
     ├── humedad: 35
     ├── nivel_agua: 80
     └── temperatura: 24
-
-
---------------------------------------------------------------------------------
-4. MATRIZ DE CUMPLIMIENTO DE LA RÚBRICA Y PUNTOS DE EVALUACIÓN (100 / 100 PTS)
---------------------------------------------------------------------------------
-
-[CRITERIO 2.1.1.1] Implementa una pantalla de Login que permita el ingreso a la aplicación mediante credenciales (usuario y contraseña) utilizando herramientas de desarrollo móvil específicas para Android. (10 PUNTOS)
- - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `LoginScreen.kt` y `AppNavigation.kt`
-
-[CRITERIO 2.1.1.2] Desarrolla las pantallas de Monitoreo y Activador, aplicando correctamente los principios de diseño de Material Design y asegurando la funcionalidad de mostrar datos recibidos y enviar datos a otro dispositivo mediante elementos interactivos. (10 PUNTOS)
- - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `DashboardScreen.kt` y `SettingsScreen.kt`
-
-[CRITERIO 2.1.2.3] La aplicación implementa conexiones inalámbricas (Bluetooth, Wi-Fi) de manera eficiente y segura, siguiendo los principios de buenas prácticas en conectividad. (15 PUNTOS)
- - ESTADO: SÍ CUMPLE (15/15)
- - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `AndroidManifest.xml`
-
-[CRITERIO 2.1.2.4] Resuelve la problemática planteada utilizando las conexiones inalámbricas de forma innovadora y efectiva. (10 PUNTOS)
- - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `NotificationHelper.kt`
-
-[CRITERIO 2.1.3.5] Integra medidas de seguridad basadas en estándares ISO (e.g., ISO/IEC 27001, ISO 27400) en la aplicación IoT. (10 PUNTOS)
- - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `LoginScreen.kt`, `DashboardScreen.kt`, `SettingsScreen.kt`
-
-[CRITERIO 2.1.3.6] Verifica y documenta el cumplimiento de los lineamientos de seguridad de la industria OT en la aplicación. (10 PUNTOS)
- - ESTADO: SÍ CUMPLE (10/10)
- - ARCHIVOS: `DashboardScreen.kt` y `SettingsScreen.kt`
-
-[CRITERIO 2.1.4.7] Configura y prueba la interconexión entre múltiples aplicaciones móviles utilizando protocolos inalámbricos. (15 PUNTOS)
- - ESTADO: SÍ CUMPLE (15/15)
- - ARCHIVOS: `DashboardScreen.kt` y `AppNavigation.kt`
-
-[CRITERIO 2.1.4.8] Se evalúa la estabilidad y eficiencia de la interconexión en diferentes escenarios de uso, asegurando que la comunicación entre dispositivos sea efectiva. (20 PUNTOS)
- - ESTADO: SÍ CUMPLE (20/20)
- - ARCHIVOS: `DashboardScreen.kt`, `BluetoothScreen.kt` y `MainActivity.kt`
-
 
 ================================================================================
 FIN DE LA DOCUMENTACIÓN

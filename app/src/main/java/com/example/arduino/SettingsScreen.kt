@@ -12,26 +12,13 @@ import com.google.firebase.database.FirebaseDatabase
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onNavigateBack: () -> Unit) {
-    // Valores por defecto
     var humedadMin by remember { mutableFloatStateOf(30f) }
     var humedadMax by remember { mutableFloatStateOf(70f) }
-
     val database = remember { FirebaseDatabase.getInstance().reference.child("arduino_test").child("configuracion") }
 
-    // Cargar datos actuales de Firebase
     LaunchedEffect(Unit) {
-        database.child("humedad_min").get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
-                val valMin = (snapshot.value as? Number)?.toFloat()
-                if (valMin != null) humedadMin = valMin
-            }
-        }
-        database.child("humedad_max").get().addOnSuccessListener { snapshot ->
-            if (snapshot.exists()) {
-                val valMax = (snapshot.value as? Number)?.toFloat()
-                if (valMax != null) humedadMax = valMax
-            }
-        }
+        database.child("humedad_min").get().addOnSuccessListener { if (it.exists()) (it.value as? Number)?.toFloat()?.let { v -> humedadMin = v } }
+        database.child("humedad_max").get().addOnSuccessListener { if (it.exists()) (it.value as? Number)?.toFloat()?.let { v -> humedadMax = v } }
     }
 
     Scaffold(
@@ -39,9 +26,7 @@ fun SettingsScreen(onNavigateBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Ajustes de Riego") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
+                    IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
                 }
             )
         }

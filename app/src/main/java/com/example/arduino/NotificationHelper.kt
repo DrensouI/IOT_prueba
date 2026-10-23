@@ -8,7 +8,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 object NotificationHelper {
-    const val CHANNEL_ID = "riego_channel"
+    const val CHANNEL_ID = "riego_channel_v2"
     private const val CHANNEL_NAME = "Notificaciones de Riego"
 
     fun createNotificationChannel(context: Context) {
@@ -18,7 +18,9 @@ object NotificationHelper {
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notificaciones sobre el nivel de humedad del sistema de riego"
+                description = "Alertas del sistema de riego para humedad del suelo"
+                enableVibration(true)
+                enableLights(true)
             }
             val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
@@ -26,18 +28,21 @@ object NotificationHelper {
     }
 
     fun showNotification(context: Context, notificationId: Int, title: String, message: String) {
+        createNotificationChannel(context)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
 
         val notificationManager = NotificationManagerCompat.from(context)
         try {
             notificationManager.notify(notificationId, builder.build())
         } catch (_: SecurityException) {
-            // El permiso de notificaciones no ha sido concedido aún
+            // Permiso de notificaciones no otorgado aún
         }
     }
 }

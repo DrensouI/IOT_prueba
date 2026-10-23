@@ -18,18 +18,19 @@ import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BluetoothScreen(onNavigateBack: () -> Unit) {
+fun BluetoothScreen(
+    onNavigateBack: () -> Unit,
+    onBluetoothConnected: () -> Unit
+) {
     val context = LocalContext.current
     var isScanning by remember { mutableStateOf(false) }
     var isConnected by remember { mutableStateOf(false) }
 
-    // Gestor de permisos múltiples
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val canEnableBle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions[Manifest.permission.BLUETOOTH_SCAN] == true &&
-            permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
+            permissions[Manifest.permission.BLUETOOTH_SCAN] == true && permissions[Manifest.permission.BLUETOOTH_CONNECT] == true
         } else {
             permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
         }
@@ -38,7 +39,7 @@ fun BluetoothScreen(onNavigateBack: () -> Unit) {
             isScanning = true
             Toast.makeText(context, "Escaneando dispositivos BLE...", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(context, "Permisos denegados. Imposible escanear.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Permisos denegados.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -47,9 +48,7 @@ fun BluetoothScreen(onNavigateBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Conexión Local (BLE)") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
+                    IconButton(onClick = onNavigateBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
                 }
             )
         }
@@ -77,7 +76,6 @@ fun BluetoothScreen(onNavigateBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Simulación de dispositivo encontrado
             if (isScanning) {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -92,7 +90,8 @@ fun BluetoothScreen(onNavigateBack: () -> Unit) {
                         Button(onClick = {
                             isConnected = true
                             isScanning = false
-                            Toast.makeText(context, "Conectado vía GATT", Toast.LENGTH_SHORT).show()
+                            onBluetoothConnected()
+                            Toast.makeText(context, "Conectado vía GATT por Bluetooth", Toast.LENGTH_SHORT).show()
                         }) {
                             Text("Conectar")
                         }
